@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Home Budget — OX & แฟน</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  :root{
+    --bg:#ffffff;--bg2:#f5f5f3;--bg3:#eeede9;
+    --text:#1a1a1a;--text2:#666;--text3:#999;
+    --border:rgba(0,0,0,0.1);--border2:rgba(0,0,0,0.06);
+    --green:#1a6b4a;--red:#b83232;
+    --radius:10px;--radius-lg:14px
+  }
+  @media(prefers-color-scheme:dark){
+    :root{
+      --bg:#1c1c1e;--bg2:#2c2c2e;--bg3:#3a3a3c;
+      --text:#f2f2f7;--text2:#aeaeb2;--text3:#636366;
+      --border:rgba(255,255,255,0.1);--border2:rgba(255,255,255,0.06);
+      --green:#34c788;--red:#e87070
+    }
+  }
+  body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;min-height:100vh}
+  .app{max-width:480px;margin:0 auto;padding:1.25rem 1rem 3rem}
+  .header{text-align:center;margin-bottom:1.5rem;padding-top:0.5rem}
+  .header h1{font-size:20px;font-weight:600;letter-spacing:-0.3px}
+  .header p{font-size:12px;color:var(--text2);margin-top:3px;letter-spacing:1px}
+  .month-nav{display:flex;align-items:center;justify-content:space-between;background:var(--bg2);border-radius:var(--radius);padding:10px 16px;margin-bottom:1rem}
+  .month-nav button{background:none;border:1px solid var(--border);width:32px;height:32px;border-radius:8px;cursor:pointer;color:var(--text);font-size:16px;display:flex;align-items:center;justify-content:center}
+  .month-nav button:active{background:var(--bg3)}
+  .month-label{font-size:15px;font-weight:600}
+  .metric-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:1rem}
+  .metric{background:var(--bg2);border-radius:var(--radius);padding:12px 14px}
+  .metric .lbl{font-size:10px;color:var(--text2);text-transform:uppercase;letter-spacing:1.2px;margin-bottom:5px}
+  .metric .val{font-size:18px;font-weight:600;letter-spacing:-0.5px}
+  .metric.expense .val{color:var(--red)}
+  .metric.income .val{color:var(--green)}
+  .section{margin-bottom:1.25rem}
+  .sec-title{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:1.5px;color:var(--text2);margin-bottom:10px}
+  .chart-wrap{position:relative;width:100%;height:160px;background:var(--bg2);border-radius:var(--radius);padding:12px}
+  .cat-list{display:flex;flex-direction:column;gap:6px}
+  .cat-item{background:var(--bg2);border-radius:var(--radius);padding:10px 14px}
+  .cat-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:5px}
+  .cat-name{font-size:13px;font-weight:500}
+  .cat-right{display:flex;align-items:center;gap:8px}
+  .cat-amt{font-size:13px;font-weight:600;color:var(--red)}
+  .cat-pct{font-size:11px;color:var(--text3);min-width:32px;text-align:right}
+  .bar-bg{height:3px;background:var(--bg3);border-radius:2px}
+  .bar-fg{height:3px;border-radius:2px;background:var(--red);transition:width 0.4s}
+  .tx-list{display:flex;flex-direction:column;gap:5px}
+  .tx-item{display:flex;align-items:center;gap:10px;background:var(--bg2);border-radius:var(--radius);padding:10px 14px}
+  .tx-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+  .tx-body{flex:1;min-width:0}
+  .tx-desc{font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .tx-meta{font-size:11px;color:var(--text3);margin-top:2px}
+  .tx-amt{font-size:13px;font-weight:600;flex-shrink:0}
+  .empty{text-align:center;padding:2rem;color:var(--text3);font-size:13px;background:var(--bg2);border-radius:var(--radius)}
+  .refresh-btn{width:100%;padding:12px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:13px;font-weight:500;cursor:pointer;margin-top:1rem}
+  .refresh-btn:active{background:var(--bg3)}
+  .loading{text-align:center;padding:3rem;color:var(--text3);font-size:14px}
+  .spin{display:inline-block;animation:spin 1s linear infinite;margin-right:8px}
+  @keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="header">
+    <h1>Home Budget</h1>
+    <p>OX & แฟน</p>
+  </div>
+  <div class="month-nav">
+    <button onclick="changeMonth(-1)">&#8592;</button>
+    <span class="month-label" id="monthLabel">...</span>
+    <button onclick="changeMonth(1)">&#8594;</button>
+  </div>
+  <div id="content"><div class="loading"><span class="spin">⟳</span>กำลังโหลด...</div></div>
+</div>
+
+<script>
+const CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vST141JGa9Z3yXtWFd3dXpciDkR0CyFtc8JE3lE1fUL0dSOk5iZNWQhuBg7-RMsMzfqaClxxGyc9V-1/pub?gid=0&single=true&output=csv';
+const MONTHS_TH = ['มกราคม','กุมภาพันธ์','มีนาคม','เมษายน','พฤษภาคม','มิถุนายน','กรกฎาคม','สิงหาคม','กันยายน','ตุลาคม','พฤศจิกายน','ธันวาคม'];
+let allData = [], chartInst = null;
+const now = new Date();
+let curYear = now.getFullYear(), curMonth = now.getMonth();
+
+const fmt = n => '฿' + Math.round(n).toLocaleString('th-TH');
+
+function parseCSV(text) {
+  return text.trim().split('\n').slice(1).map(l => {
+    const c = l.split(',');
+    return {
+      date: (c[0]||'').trim().replace(/"/g,''),
+      desc: (c[1]||'').trim().replace(/"/g,''),
+      amount: parseFloat((c[2]||'0').replace(/"/g,'')),
+      cat: (c[3]||'Other').trim().replace(/"/g,''),
+      person: (c[4]||'').trim().replace(/"/g,''),
+      type: (c[5]||'expense').trim().replace(/"/g,'')
+    };
+  }).filter(r => r.date && !isNaN(r.amount) && r.amount > 0);
+}
+
+function filterMonth(data) {
+  return data.filter(r => {
+    const d = new Date(r.date);
+    return d.getFullYear() === curYear && d.getMonth() === curMonth;
+  });
+}
+
+function render(data) {
+  const monthly = filterMonth(data);
+  const income = monthly.filter(r=>r.type==='income').reduce((s,r)=>s+r.amount,0);
+  const expense = monthly.filter(r=>r.type==='expense').reduce((s,r)=>s+r.amount,0);
+  const bal = income - expense;
+
+  const cats = {};
+  monthly.filter(r=>r.type==='expense').forEach(r=>{
+    const c = r.cat||'Other';
+    cats[c] = (cats[c]||0) + r.amount;
+  });
+  const sortedCats = Object.entries(cats).sort((a,b)=>b[1]-a[1]);
+  const maxCat = sortedCats[0] ? sortedCats[0][1] : 1;
+
+  const byDay = {};
+  monthly.filter(r=>r.type==='expense').forEach(r=>{
+    byDay[r.date] = (byDay[r.date]||0) + r.amount;
+  });
+  const days = Object.keys(byDay).sort();
+  const dayAmts = days.map(d => Math.round(byDay[d]));
+
+  const recent = [...monthly].sort((a,b)=>new Date(b.date)-new Date(a.date)).slice(0,10);
+  const isDark = matchMedia('(prefers-color-scheme:dark)').matches;
+  const barC = isDark ? '#e87070' : '#c84040';
+  const gridC = isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.05)';
+  const tickC = isDark ? '#636366' : '#aaa';
+
+  document.getElementById('content').innerHTML = `
+    <div class="metric-grid">
+      <div class="metric expense"><div class="lbl">รายจ่าย</div><div class="val">${fmt(expense)}</div></div>
+      <div class="metric income"><div class="lbl">รายรับ</div><div class="val">${fmt(income)}</div></div>
+      <div class="metric"><div class="lbl">คงเหลือ</div><div class="val" style="color:${bal>=0?'var(--green)':'var(--red)'}">${fmt(Math.abs(bal))}</div></div>
+    </div>
+
+    ${days.length ? `
+    <div class="section">
+      <div class="sec-title">รายจ่ายรายวัน</div>
+      <div class="chart-wrap"><canvas id="dc"></canvas></div>
+    </div>` : ''}
+
+    ${sortedCats.length ? `
+    <div class="section">
+      <div class="sec-title">หมวดหมู่</div>
+      <div class="cat-list">
+        ${sortedCats.map(([c,v])=>`
+        <div class="cat-item">
+          <div class="cat-top">
+            <span class="cat-name">${c}</span>
+            <div class="cat-right">
+              <span class="cat-amt">${fmt(v)}</span>
+              <span class="cat-pct">${Math.round(v/expense*100)}%</span>
+            </div>
+          </div>
+          <div class="bar-bg"><div class="bar-fg" style="width:${Math.round(v/maxCat*100)}%"></div></div>
+        </div>`).join('')}
+      </div>
+    </div>` : ''}
+
+    ${recent.length ? `
+    <div class="section">
+      <div class="sec-title">รายการล่าสุด</div>
+      <div class="tx-list">
+        ${recent.map(r=>`
+        <div class="tx-item">
+          <div class="tx-dot" style="background:${r.type==='income'?'var(--green)':'var(--red)'}"></div>
+          <div class="tx-body">
+            <div class="tx-desc">${r.desc}</div>
+            <div class="tx-meta">${r.date} · ${r.cat||'—'} · ${r.person||'—'}</div>
+          </div>
+          <div class="tx-amt" style="color:${r.type==='income'?'var(--green)':'var(--red)'}">${r.type==='income'?'+':'-'}${fmt(r.amount)}</div>
+        </div>`).join('')}
+      </div>
+    </div>` : `<div class="empty">ยังไม่มีรายการในเดือนนี้</div>`}
+
+    <button class="refresh-btn" onclick="loadData()">⟳ Refresh</button>
+  `;
+
+  if (days.length) {
+    if (chartInst) { chartInst.destroy(); chartInst = null; }
+    chartInst = new Chart(document.getElementById('dc'), {
+      type: 'bar',
+      data: {
+        labels: days.map(d => d.slice(8)),
+        datasets: [{ data: dayAmts, backgroundColor: barC, borderRadius: 4, borderSkipped: false }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => fmt(ctx.raw) } } },
+        scales: {
+          x: { ticks: { color: tickC, font: { size: 10 } }, grid: { display: false } },
+          y: { ticks: { color: tickC, font: { size: 10 }, callback: v => '฿' + Math.round(v/1000) + 'k' }, grid: { color: gridC } }
+        }
+      }
+    });
+  }
+}
+
+function changeMonth(d) {
+  curMonth += d;
+  if (curMonth > 11) { curMonth = 0; curYear++; }
+  if (curMonth < 0) { curMonth = 11; curYear--; }
+  document.getElementById('monthLabel').textContent = `${MONTHS_TH[curMonth]} ${curYear+543}`;
+  render(allData);
+}
+
+async function loadData() {
+  document.getElementById('content').innerHTML = '<div class="loading"><span class="spin">⟳</span>กำลังโหลด...</div>';
+  try {
+    const res = await fetch(CSV_URL + '&t=' + Date.now());
+    const text = await res.text();
+    allData = parseCSV(text);
+    render(allData);
+  } catch(e) {
+    document.getElementById('content').innerHTML = '<div class="empty">โหลดไม่ได้ครับ เช็คอินเทอร์เน็ตแล้วลอง Refresh</div>';
+  }
+}
+
+document.getElementById('monthLabel').textContent = `${MONTHS_TH[curMonth]} ${curYear+543}`;
+loadData();
+</script>
+</body>
+</html>
