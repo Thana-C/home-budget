@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Life Budget · งบการเงินในบ้าน</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Kanit:wght@500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&display=swap" rel="stylesheet" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  :root {
+    --paper: #f3ede1;
+    --paper-2: #ede4d3;
+    --card: #fbf8f1;
+    --ink: #20251f;
+    --ink-soft: #5c6157;
+    --line: #d9cfba;
+    --accent: #b85c38;       /* terracotta */
+    --accent-soft: #e9c9b8;
+    --green: #4f7a52;
+    --red: #b14a3c;
+    --gold: #c79a3e;
+    --shadow: 0 1px 2px rgba(40,33,20,.06), 0 8px 24px rgba(40,33,20,.06);
+    --radius: 16px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: "IBM Plex Sans Thai", system-ui, sans-serif;
+    background: var(--paper);
+    background-image:
+      radial-gradient(circle at 12% -10%, rgba(184,92,56,.07), transparent 40%),
+      radial-gradient(circle at 110% 0%, rgba(199,154,62,.08), transparent 45%);
+    color: var(--ink);
+    min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 32px 22px 80px; }
+
+  /* Header */
+  header.top { display: flex; align-items: flex-end; justify-content: space-between; flex-wrap: wrap; gap: 18px; margin-bottom: 26px; border-bottom: 2px solid var(--ink); padding-bottom: 18px; }
+  .brand { display: flex; flex-direction: column; }
+  .brand .kicker { font-family: "Kanit"; font-weight: 500; letter-spacing: .22em; text-transform: uppercase; font-size: 11px; color: var(--accent); }
+  .brand h1 { font-family: "Kanit"; font-weight: 700; font-size: clamp(30px, 5vw, 46px); line-height: 1; letter-spacing: -.01em; }
+  .controls { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  select, .btn {
+    font-family: "Kanit"; font-weight: 500; font-size: 14px;
+    background: var(--card); color: var(--ink);
+    border: 1.5px solid var(--ink); border-radius: 999px;
+    padding: 9px 16px; cursor: pointer; transition: .15s;
+  }
+  select:hover, .btn:hover { background: var(--ink); color: var(--paper); }
+  .btn { display: inline-flex; align-items: center; gap: 7px; }
+
+  /* Notice */
+  .notice { background: #fff7e8; border: 1.5px solid var(--gold); border-radius: 12px; padding: 12px 16px; margin-bottom: 22px; font-size: 13.5px; color: #6b5418; display: none; }
+  .notice.show { display: block; }
+  .notice b { font-family: "Kanit"; }
+
+  /* KPI cards */
+  .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 22px; }
+  .kpi { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px 18px 16px; box-shadow: var(--shadow); position: relative; overflow: hidden; }
+  .kpi::after { content: ""; position: absolute; top: 0; left: 0; width: 4px; height: 100%; background: var(--accent); }
+  .kpi.inc::after { background: var(--green); }
+  .kpi.net::after { background: var(--gold); }
+  .kpi.avg::after { background: var(--ink-soft); }
+  .kpi .label { font-size: 12.5px; color: var(--ink-soft); font-weight: 500; }
+  .kpi .val { font-family: "Kanit"; font-weight: 700; font-size: 27px; margin-top: 6px; letter-spacing: -.01em; }
+  .kpi .sub { font-size: 11.5px; color: var(--ink-soft); margin-top: 3px; }
+
+  /* Layout grid */
+  .grid { display: grid; grid-template-columns: 1.4fr 1fr; gap: 16px; margin-bottom: 16px; }
+  .panel { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 20px; box-shadow: var(--shadow); }
+  .panel h2 { font-family: "Kanit"; font-weight: 600; font-size: 16px; margin-bottom: 4px; }
+  .panel .hint { font-size: 12px; color: var(--ink-soft); margin-bottom: 14px; }
+  .chart-box { position: relative; height: 280px; }
+  .chart-box.tall { height: 320px; }
+
+  /* Category list */
+  .catlist { display: flex; flex-direction: column; gap: 10px; }
+  .catrow { display: grid; grid-template-columns: 1fr auto; gap: 4px; }
+  .catrow .top { display: flex; justify-content: space-between; font-size: 13.5px; }
+  .catrow .nm { font-weight: 500; }
+  .catrow .amt { font-family: "Kanit"; font-weight: 600; }
+  .bar { height: 7px; border-radius: 999px; background: var(--paper-2); overflow: hidden; }
+  .bar > span { display: block; height: 100%; border-radius: 999px; background: var(--accent); }
+
+  /* Table */
+  .tablewrap { margin-top: 4px; overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+  th { text-align: left; font-family: "Kanit"; font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--ink-soft); padding: 8px 10px; border-bottom: 2px solid var(--line); position: sticky; top: 0; background: var(--card); }
+  td { padding: 9px 10px; border-bottom: 1px solid var(--line); }
+  tr:hover td { background: var(--paper); }
+  .pill { display: inline-block; font-size: 11px; font-weight: 500; padding: 2px 9px; border-radius: 999px; background: var(--paper-2); color: var(--ink-soft); }
+  .amt-exp { color: var(--red); font-family: "Kanit"; font-weight: 600; }
+  .amt-inc { color: var(--green); font-family: "Kanit"; font-weight: 600; }
+  .tbl-controls { display: flex; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
+  .tbl-controls input { font-family: "IBM Plex Sans Thai"; font-size: 13px; padding: 8px 13px; border: 1.5px solid var(--line); border-radius: 999px; background: var(--paper); flex: 1; min-width: 160px; }
+  .empty { text-align: center; color: var(--ink-soft); padding: 30px; font-size: 14px; }
+
+  footer { text-align: center; margin-top: 36px; font-size: 12px; color: var(--ink-soft); }
+  footer .dot { color: var(--accent); }
+
+  @media (max-width: 860px) {
+    .kpis { grid-template-columns: repeat(2, 1fr); }
+    .grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div class="brand">
+      <span class="kicker">งบการเงินในบ้าน</span>
+      <h1>Life&nbsp;Budget</h1>
+    </div>
+    <div class="controls">
+      <select id="monthSel" aria-label="เลือกเดือน"></select>
+      <button class="btn" id="loadFileBtn" title="โหลดไฟล์ CSV ที่ดาวน์โหลดจาก Google Sheet">⬆ โหลดไฟล์ CSV</button>
+      <input type="file" id="fileInput" accept=".csv" style="display:none" />
+    </div>
+  </header>
+
+  <div class="notice" id="notice"></div>
+
+  <section class="kpis">
+    <div class="kpi exp"><div class="label">รายจ่ายเดือนนี้</div><div class="val" id="kExp">฿0</div><div class="sub" id="kExpSub">—</div></div>
+    <div class="kpi inc"><div class="label">รายรับเดือนนี้</div><div class="val" id="kInc">฿0</div><div class="sub" id="kIncSub">—</div></div>
+    <div class="kpi net"><div class="label">คงเหลือ (รับ − จ่าย)</div><div class="val" id="kNet">฿0</div><div class="sub">สุทธิของเดือน</div></div>
+    <div class="kpi avg"><div class="label">เฉลี่ยจ่ายต่อวัน</div><div class="val" id="kAvg">฿0</div><div class="sub" id="kAvgSub">—</div></div>
+  </section>
+
+  <div class="grid">
+    <div class="panel">
+      <h2>รายจ่ายรายวัน</h2>
+      <div class="hint">ดูว่าวันไหนใช้เยอะ ในเดือนที่เลือก</div>
+      <div class="chart-box"><canvas id="dailyChart"></canvas></div>
+    </div>
+    <div class="panel">
+      <h2>แยกตามหมวดหมู่</h2>
+      <div class="hint">เดือนที่เลือก เรียงจากมากไปน้อย</div>
+      <div class="catlist" id="catList"></div>
+    </div>
+  </div>
+
+  <div class="grid">
+    <div class="panel">
+      <h2>แนวโน้มรายจ่ายทุกเดือน</h2>
+      <div class="hint">เทียบยอดจ่ายแต่ละเดือนที่ผ่านมา</div>
+      <div class="chart-box"><canvas id="trendChart"></canvas></div>
+    </div>
+    <div class="panel">
+      <h2>แยกตามคนจ่าย</h2>
+      <div class="hint">เดือนที่เลือก</div>
+      <div class="chart-box"><canvas id="personChart"></canvas></div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>รายการทั้งหมด</h2>
+    <div class="hint">เดือนที่เลือก · ค้นหาได้</div>
+    <div class="tbl-controls">
+      <input type="text" id="search" placeholder="ค้นหารายการ เช่น กาแฟ, ข้าว…" />
+    </div>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>วันที่</th><th>รายการ</th><th>หมวดหมู่</th><th>คนจ่าย</th><th style="text-align:right">จำนวน</th></tr></thead>
+        <tbody id="tbody"></tbody>
+      </table>
+      <div class="empty" id="tableEmpty" style="display:none">ไม่พบรายการ</div>
+    </div>
+  </div>
+
+  <footer>Life Budget <span class="dot">·</span> ดึงข้อมูลสดจาก Google Sheet</footer>
+</div>
+
+<script>
+/* =========================================================================
+   ตั้งค่า: วาง URL ของ Google Sheet (แบบ Publish to web → CSV) ตรงนี้
+   ถ้ายังไม่ใส่ หน้าเว็บจะแสดงข้อมูลตัวอย่างให้ดูหน้าตาก่อน
+   ========================================================================= */
+const SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vST141JGa9Z3yXtWFd3dXpciDkR0CyFtc8JE3lE1fUL0dSOk5iZNWQhuBg7-RMsMzfqaClxxGyc9V-1/pub?output=csv"; // <-- วาง URL ระหว่างเครื่องหมายคำพูด
+
+const COLORS = ['#b85c38','#4f7a52','#c79a3e','#7a6b9d','#3f7a8c','#a8553e','#6b8e4e','#bd8b4a','#8c5a6b','#5c7d7a','#9d7a3f','#7a8c3f'];
+const fmt = n => '฿' + Math.round(n).toLocaleString('th-TH');
+const fmtFull = n => '฿' + n.toLocaleString('th-TH', {maximumFractionDigits: 2});
+const MONTH_TH = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
+
+let DATA = [];           // [{date, ym, day, desc, amount, cat, person, type}]
+let charts = {};
+
+/* ---------- ข้อมูลตัวอย่าง (ใช้เมื่อยังไม่ได้เชื่อม Sheet) ---------- */
+const DEMO = [
+  ['2026-05-01','กาแฟ',80,'Coffee/Tea','Thana','expense'],
+  ['2026-05-01','ข้าวเที่ยง',70,'Lunch','Thana','expense'],
+  ['2026-05-02','เซเว่น',120,'Stuff','Thana','expense'],
+  ['2026-05-03','ค่าน้ำมัน',900,'Transport','Thana','expense'],
+  ['2026-05-05','เงินเดือน',45000,'Income','Thana','income'],
+  ['2026-05-06','ข้าวเย็น',250,'Dinner','Thana','expense'],
+  ['2026-05-08','อาหารแมว',350,'Cat','Thana','expense'],
+  ['2026-05-12','ช้อปปิ้ง',1500,'Shopping','Thana','expense'],
+  ['2026-05-15','ค่าไฟ',1200,'Fixed/อื่นๆ','Thana','expense'],
+  ['2026-04-03','กาแฟ',80,'Coffee/Tea','Thana','expense'],
+  ['2026-04-10','ข้าวเที่ยง',60,'Lunch','Thana','expense'],
+  ['2026-04-05','เงินเดือน',45000,'Income','Thana','income'],
+  ['2026-04-20','ค่าผ่อนรถ',12000,'Fixed/รถ','Thana','expense'],
+  ['2026-03-05','เงินเดือน',45000,'Income','Thana','income'],
+  ['2026-03-15','เที่ยว',8000,'Travel','Thana','expense'],
+];
+
+/* ---------- แปลงแถวดิบเป็นข้อมูล ---------- */
+function ingest(rows) {
+  const out = [];
+  for (const r of rows) {
+    if (!r || r.length < 3) continue;
+    const dateStr = String(r[0] || '').trim();
+    if (!/^\d{4}-\d{2}-\d{2}/.test(dateStr)) continue; // ข้าม header / แถวเสีย
+    const amount = parseFloat(String(r[2]).replace(/[, ฿]/g,'')) || 0;
+    if (amount <= 0) continue;
+    const type = String(r[5] || 'expense').trim().toLowerCase() === 'income' ? 'income' : 'expense';
+    out.push({
+      date: dateStr,
+      ym: dateStr.slice(0,7),
+      day: parseInt(dateStr.slice(8,10),10),
+      desc: String(r[1] || '').trim(),
+      amount,
+      cat: String(r[3] || 'Other').trim() || 'Other',
+      person: String(r[4] || '—').trim() || '—',
+      type
+    });
+  }
+  out.sort((a,b) => a.date < b.date ? 1 : -1);
+  return out;
+}
+
+/* ---------- โหลดข้อมูล ---------- */
+function showNotice(html) { const n = document.getElementById('notice'); n.innerHTML = html; n.classList.add('show'); }
+
+async function load() {
+  if (SHEET_CSV_URL) {
+    try {
+      const res = await fetch(SHEET_CSV_URL);
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const text = await res.text();
+      const parsed = Papa.parse(text.trim(), { skipEmptyLines: true });
+      DATA = ingest(parsed.data);
+      if (!DATA.length) throw new Error('ไม่พบข้อมูลในชีต');
+      render();
+      return;
+    } catch (e) {
+      showNotice('<b>เชื่อม Google Sheet ไม่สำเร็จ:</b> ' + e.message + ' — กำลังแสดงข้อมูลตัวอย่างแทน ลองเช็ค URL หรือกดปุ่ม “โหลดไฟล์ CSV”');
+    }
+  } else {
+    showNotice('<b>โหมดตัวอย่าง:</b> ยังไม่ได้เชื่อม Google Sheet — เปิดไฟล์ index.html แล้ววาง URL ของชีต (Publish to web → CSV) ในตัวแปร <code>SHEET_CSV_URL</code> หรือกดปุ่ม “โหลดไฟล์ CSV” เพื่อดูข้อมูลจริง');
+  }
+  DATA = ingest(DEMO);
+  render();
+}
+
+/* ---------- อัปโหลดไฟล์ CSV เอง ---------- */
+document.getElementById('loadFileBtn').onclick = () => document.getElementById('fileInput').click();
+document.getElementById('fileInput').onchange = (ev) => {
+  const file = ev.target.files[0];
+  if (!file) return;
+  Papa.parse(file, {
+    skipEmptyLines: true,
+    complete: (res) => {
+      DATA = ingest(res.data);
+      document.getElementById('notice').classList.remove('show');
+      if (!DATA.length) { showNotice('<b>ไฟล์นี้ไม่มีข้อมูลที่อ่านได้</b> — ตรวจสอบว่าคอลัมน์เรียงเป็น วันที่, รายการ, จำนวน, หมวดหมู่, คนจ่าย, ประเภท'); return; }
+      render();
+    }
+  });
+};
+
+/* ---------- แสดงผล ---------- */
+function render() {
+  const months = [...new Set(DATA.map(d => d.ym))].sort().reverse();
+  const sel = document.getElementById('monthSel');
+  sel.innerHTML = months.map(m => {
+    const [y,mo] = m.split('-');
+    return `<option value="${m}">${MONTH_TH[+mo-1]} ${(+y)+543}</option>`;
+  }).join('');
+  sel.onchange = renderMonth;
+  document.getElementById('search').oninput = renderTable;
+  renderTrend(months);
+  renderMonth();
+}
+
+function curMonth() { return document.getElementById('monthSel').value; }
+
+function renderMonth() {
+  const ym = curMonth();
+  const rows = DATA.filter(d => d.ym === ym);
+  const exp = rows.filter(d => d.type === 'expense');
+  const inc = rows.filter(d => d.type === 'income');
+  const totalExp = exp.reduce((s,d) => s+d.amount, 0);
+  const totalInc = inc.reduce((s,d) => s+d.amount, 0);
+  const days = new Set(exp.map(d => d.day)).size || 1;
+
+  document.getElementById('kExp').textContent = fmt(totalExp);
+  document.getElementById('kExpSub').textContent = exp.length + ' รายการ';
+  document.getElementById('kInc').textContent = fmt(totalInc);
+  document.getElementById('kIncSub').textContent = inc.length + ' รายการ';
+  const net = totalInc - totalExp;
+  const kNet = document.getElementById('kNet');
+  kNet.textContent = (net < 0 ? '−' : '') + fmt(Math.abs(net));
+  kNet.style.color = net < 0 ? 'var(--red)' : 'var(--green)';
+  document.getElementById('kAvg').textContent = fmt(totalExp / days);
+  document.getElementById('kAvgSub').textContent = 'จาก ' + days + ' วันที่มีจ่าย';
+
+  renderCats(exp, totalExp);
+  renderDaily(exp, ym);
+  renderPerson(exp);
+  renderTable();
+}
+
+function renderCats(exp, total) {
+  const map = {};
+  exp.forEach(d => map[d.cat] = (map[d.cat]||0) + d.amount);
+  const arr = Object.entries(map).sort((a,b) => b[1]-a[1]);
+  const box = document.getElementById('catList');
+  if (!arr.length) { box.innerHTML = '<div class="empty">ไม่มีรายจ่ายในเดือนนี้</div>'; return; }
+  const max = arr[0][1];
+  box.innerHTML = arr.map(([cat,amt],i) => `
+    <div class="catrow">
+      <div class="top"><span class="nm">${cat}</span><span class="amt">${fmt(amt)} <span style="color:var(--ink-soft);font-weight:400">(${Math.round(amt/total*100)}%)</span></span></div>
+      <div class="bar"><span style="width:${amt/max*100}%;background:${COLORS[i%COLORS.length]}"></span></div>
+    </div>`).join('');
+}
+
+function renderDaily(exp, ym) {
+  const daysInMonth = new Date(+ym.slice(0,4), +ym.slice(5,7), 0).getDate();
+  const byDay = Array(daysInMonth).fill(0);
+  exp.forEach(d => { byDay[d.day-1] += d.amount; });
+  drawBar('dailyChart', byDay.map((_,i)=>i+1), byDay, 'var(--accent)');
+}
+
+function renderPerson(exp) {
+  const map = {};
+  exp.forEach(d => map[d.person] = (map[d.person]||0) + d.amount);
+  const labels = Object.keys(map), vals = Object.values(map);
+  if (charts.person) charts.person.destroy();
+  charts.person = new Chart(document.getElementById('personChart'), {
+    type: 'doughnut',
+    data: { labels, datasets: [{ data: vals, backgroundColor: COLORS, borderColor: '#fbf8f1', borderWidth: 3 }] },
+    options: { responsive: true, maintainAspectRatio: false, cutout: '62%',
+      plugins: { legend: { position: 'bottom', labels: { font: { family: 'IBM Plex Sans Thai', size: 12 }, padding: 14, color: '#5c6157' } },
+        tooltip: { callbacks: { label: c => ' ' + c.label + ': ' + fmt(c.parsed) } } } }
+  });
+}
+
+function renderTrend(months) {
+  const asc = [...months].sort();
+  const labels = asc.map(m => MONTH_TH[+m.slice(5,7)-1]);
+  const vals = asc.map(m => DATA.filter(d => d.ym===m && d.type==='expense').reduce((s,d)=>s+d.amount,0));
+  drawBar('trendChart', labels, vals, 'var(--gold)', true);
+}
+
+function drawBar(id, labels, data, color, isTrend) {
+  const css = getComputedStyle(document.documentElement);
+  const c = css.getPropertyValue(color.replace('var(','').replace(')','').trim()) || color;
+  if (charts[id]) charts[id].destroy();
+  charts[id] = new Chart(document.getElementById(id), {
+    type: 'bar',
+    data: { labels, datasets: [{ data, backgroundColor: c.trim(), borderRadius: 5, maxBarThickness: isTrend ? 46 : 18 }] },
+    options: { responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => fmt(ctx.parsed.y) } } },
+      scales: {
+        x: { grid: { display: false }, ticks: { font: { family: 'IBM Plex Sans Thai', size: 11 }, color: '#5c6157', maxRotation: 0, autoSkip: true, maxTicksLimit: isTrend ? 12 : 16 } },
+        y: { grid: { color: 'rgba(0,0,0,.05)' }, ticks: { font: { family: 'IBM Plex Sans Thai', size: 11 }, color: '#5c6157', callback: v => '฿'+v.toLocaleString('th-TH') }, beginAtZero: true }
+      } }
+  });
+}
+
+function renderTable() {
+  const ym = curMonth();
+  const q = document.getElementById('search').value.trim().toLowerCase();
+  let rows = DATA.filter(d => d.ym === ym);
+  if (q) rows = rows.filter(d => d.desc.toLowerCase().includes(q) || d.cat.toLowerCase().includes(q));
+  const tb = document.getElementById('tbody');
+  document.getElementById('tableEmpty').style.display = rows.length ? 'none' : 'block';
+  tb.innerHTML = rows.map(d => `
+    <tr>
+      <td>${d.date.slice(8,10)}/${d.date.slice(5,7)}</td>
+      <td>${d.desc || '—'}</td>
+      <td><span class="pill">${d.cat}</span></td>
+      <td>${d.person}</td>
+      <td style="text-align:right" class="${d.type==='income'?'amt-inc':'amt-exp'}">${d.type==='income'?'+':'−'}${fmtFull(d.amount)}</td>
+    </tr>`).join('');
+}
+
+load();
+</script>
+</body>
+</html>
